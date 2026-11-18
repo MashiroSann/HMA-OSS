@@ -64,8 +64,10 @@ fun getUncommittedSuffix(): String {
 val gitVersionName: String get() {
     val suffix = getUncommittedSuffix()
 
-    return suffix.ifEmpty {
-        "oss-$gitCommitCountAfterOss"
+    return if (suffix.isEmpty()) {
+        "HMA-Mashiro-$gitCommitCountAfterOss"
+    } else {
+        "HMA-Mashiro-$suffix"
     }
 }
 
