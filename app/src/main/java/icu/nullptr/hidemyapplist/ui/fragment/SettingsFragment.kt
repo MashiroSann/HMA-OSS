@@ -107,6 +107,7 @@ class SettingsFragment : Fragment(R.layout.fragment_settings), PreferenceFragmen
                 "appDataIsolation" -> ConfigManager.altAppDataIsolation
                 "voldAppDataIsolation" -> ConfigManager.altVoldAppDataIsolation
                 "skipSystemAppDataIsolation" -> ConfigManager.skipSystemAppDataIsolation
+                "targetOnlyAppDataIsolation" -> ConfigManager.targetOnlyAppDataIsolation
                 "disableActivityLaunchProtection" -> ConfigManager.disableActivityLaunchProtection
                 "forceMountData" -> ConfigManager.forceMountData
                 "enableInternet" -> PrefManager.enableInternet == Constants.ENABLE_INTERNET_ON
@@ -155,6 +156,7 @@ class SettingsFragment : Fragment(R.layout.fragment_settings), PreferenceFragmen
                 "appDataIsolation" -> ConfigManager.altAppDataIsolation = value
                 "voldAppDataIsolation" -> ConfigManager.altVoldAppDataIsolation = value
                 "skipSystemAppDataIsolation" -> ConfigManager.skipSystemAppDataIsolation = value
+                "targetOnlyAppDataIsolation" -> ConfigManager.targetOnlyAppDataIsolation = value
                 else -> throw IllegalArgumentException("Invalid key: $key")
             }
         }

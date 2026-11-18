@@ -166,6 +166,8 @@
     <string name="settings_data_isolation_unsupported">此选项仅支持 Android 11 及以上的系统</string>
     <string name="settings_app_data_isolation">App data 隔离</string>
     <string name="settings_vold_app_data_isolation">Vold app data 隔离</string>
+    <string name="settings_target_only_app_data_isolation">仅对作用域内的应用隔离</string>
+    <string name="settings_target_only_app_data_isolation_summary">只有加入 HMA 作用域的应用会获得隔离的 Android/data、Android/obb 视图；其他应用保持系统默认的存储行为。改动对之后启动的应用生效。</string>
     <string name="settings_warning">警告</string>
     <string name="settings_vold_warning">启用 AOSP 隔离应用私有目录功能。这可以增强隐藏效果，但可能会导致稳定性问题。此功能在 AOSP 中已被废弃，可能无法正常工作。</string>
     <string name="settings_change_require_root">此操作需要 Root 权限</string>

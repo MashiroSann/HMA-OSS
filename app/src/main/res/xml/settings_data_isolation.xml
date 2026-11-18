@@ -30,6 +30,12 @@
             android:summary="@string/settings_need_reboot"
             app:singleLineTitle="false"
             android:title="@string/app_exclude_system_apps" />
+
+        <SwitchPreferenceCompat
+            android:key="targetOnlyAppDataIsolation"
+            android:summary="@string/settings_target_only_app_data_isolation_summary"
+            app:singleLineTitle="false"
+            android:title="@string/settings_target_only_app_data_isolation" />
     </PreferenceCategory>
 
     <PreferenceCategory android:title="@string/settings_module">

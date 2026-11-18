@@ -114,6 +114,13 @@ object ConfigManager {
             saveConfig()
         }
 
+    var targetOnlyAppDataIsolation: Boolean
+        get() = config.targetOnlyAppDataIsolation
+        set(value) {
+            config.targetOnlyAppDataIsolation = value
+            saveConfig()
+        }
+
     var defaultConfig: JsonConfig.AppConfig?
         get() = config.defaultConfig
         set(value) {
