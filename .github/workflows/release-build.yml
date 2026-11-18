@@ -1,0 +1,188 @@
+name: Release build
+
+# Release (R8-minified) build of the manager APK + Zygisk module zip.
+#
+# Long-term self-hosted signing (recommended):
+#   repo secrets: KEYSTORE_BASE64, KEYSTORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD
+#   -> every build is signed with the same key, so builds upgrade each other
+#      in place forever (the module pins the manager signature via Magic.java,
+#      see zygote/.../ServiceUtils.kt#verifyAppSignature).
+#
+# Without those secrets the build falls back to the runner's generated debug
+# keystore: flashable, but never installable over your previous build once the
+# runner regenerates the key.
+
+on:
+  workflow_dispatch:
+    inputs:
+      official_build:
+        description: 'officialBuild=true (stable versionName, recommended)'
+        type: boolean
+        default: true
+      use_provided_key:
+        description: 'Sign with KEYSTORE_BASE64 secret (uncheck only for a throwaway build)'
+        type: boolean
+        default: true
+      publish_release:
+        description: 'Publish a GitHub Release (keeps artifacts forever)'
+        type: boolean
+        default: true
+      release_tag:
+        description: 'Release tag (empty = use the built version, e.g. oss-176)'
+        type: string
+        required: false
+        default: ''
+      note:
+        description: 'Extra note appended to the release body'
+        type: string
+        required: false
+        default: ''
+  push:
+    tags:
+      - 'v*'
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write   # only used by the "Publish GitHub Release" step
+
+jobs:
+  release:
+    name: Release build
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      HAS_KEYSTORE: ${{ secrets.KEYSTORE_BASE64 != '' }}
+      # tag pushes sign with the provided key whenever the secret exists
+      USE_PROVIDED_KEY: ${{ inputs.use_provided_key == true || (github.event_name == 'push' && secrets.KEYSTORE_BASE64 != '') }}
+      # tag pushes always use the stable version name
+      OFFICIAL_BUILD: ${{ github.event_name != 'workflow_dispatch' || (inputs.official_build && 'true' || 'false') }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v6
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Prepare environment
+        run: |
+          # root build.gradle.kts loads local.properties unconditionally
+          touch local.properties
+          if [ "$OFFICIAL_BUILD" = "true" ]; then
+            echo "officialBuild=true" >> local.properties
+          fi
+          # debug keystore: fallback signing config, also required by GenerateSignInfoTask
+          mkdir -p ~/.config/.android
+          ln -sfn ~/.config/.android ~/.android
+          keytool -genkey -v -keystore ~/.config/.android/debug.keystore \
+            -alias androiddebugkey -storepass android -keypass android \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname "CN=Android Debug,O=Android,C=US" 2>/dev/null || true
+
+      - name: Fail fast when the signing secret is missing
+        if: ${{ env.USE_PROVIDED_KEY == 'true' && env.HAS_KEYSTORE != 'true' }}
+        run: |
+          echo "::error::Provided-key signing requested but KEYSTORE_BASE64 secret is not set"
+          exit 1
+
+      - name: Configure provided signing key
+        if: ${{ env.USE_PROVIDED_KEY == 'true' && env.HAS_KEYSTORE == 'true' }}
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > "$GITHUB_WORKSPACE/key.jks"
+          {
+            echo "fileDir=$GITHUB_WORKSPACE/key.jks"
+            echo "storePassword=${{ secrets.KEYSTORE_PASSWORD }}"
+            echo "keyAlias=${{ secrets.KEY_ALIAS }}"
+            echo "keyPassword=${{ secrets.KEY_PASSWORD }}"
+          } >> local.properties
+
+      - name: Cache Gradle
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+            ~/.config/.android/debug.keystore
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', 'gradle/wrapper/gradle-wrapper.properties', 'gradle/libs.versions.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Gradle prebuild (optional)
+        continue-on-error: true
+        run: ./gradlew prebuild --stacktrace
+
+      - name: Build release
+        run: ./gradlew :app:assembleRelease :zygote:assembleRelease --stacktrace
+
+      - name: Read build metadata
+        id: meta
+        run: |
+          # app APK is named <rootProject.name>-<versionName>-<variant>.apk
+          APK=$(ls app/build/outputs/apk/release/*.apk | head -n1)
+          VERSION=$(basename "$APK" | sed -E 's/^HMA-OSS-(.*)-release\.apk$/\1/')
+          CODE=$(grep -oP 'versionCode=\K[0-9]+' app/build/outputs/apk/release/output-metadata.json | head -n1 || true)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "versionCode=$CODE" >> "$GITHUB_OUTPUT"
+          echo "apk=$APK" >> "$GITHUB_OUTPUT"
+          echo "Built version: $VERSION (versionCode=$CODE)"
+          if [ "$USE_PROVIDED_KEY" != "true" ]; then
+            echo "::warning::Artifacts are signed with the DEBUG keystore"
+          fi
+          {
+            echo "### HMA-OSS $VERSION"
+            echo "- versionCode: \`$CODE\`"
+            echo "- signing: $([ "$USE_PROVIDED_KEY" = "true" ] && echo 'provided key' || echo '**debug key**')"
+            echo "- module: $(basename $(ls zygote/build/outputs/magisk/release/*.zip | head -n1))"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload manager APK
+        uses: actions/upload-artifact@v7
+        with:
+          archive: false
+          name: hma-oss-manager-${{ steps.meta.outputs.version }}
+          path: app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+
+      - name: Upload zygisk module
+        uses: actions/upload-artifact@v7
+        with:
+          archive: false
+          name: hma-oss-zygisk-${{ steps.meta.outputs.version }}
+          path: zygote/build/outputs/magisk/release/*.zip
+          if-no-files-found: error
+
+      - name: Upload R8 mapping
+        uses: actions/upload-artifact@v7
+        with:
+          name: hma-oss-mapping-${{ steps.meta.outputs.version }}
+          path: |
+            app/build/outputs/mapping/release/mapping.txt
+            zygote/build/outputs/mapping/release/mapping.txt
+          if-no-files-found: warn
+
+      - name: Publish GitHub Release
+        if: ${{ inputs.publish_release == true || startsWith(github.ref, 'refs/tags/') }}
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || inputs.release_tag || steps.meta.outputs.version }}
+          name: HMA-OSS ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || inputs.release_tag || steps.meta.outputs.version }}
+          body: |
+            Built from `${{ github.sha }}` (${{ github.ref_name }})
+            versionCode: `${{ steps.meta.outputs.versionCode }}`
+
+            ${{ inputs.note }}
+
+            Flash the module zip in Magisk/KernelSU, reboot.
+            Update compat: only builds signed with the same key can replace each other.
+          generate_release_notes: false
+          files: |
+            zygote/build/outputs/magisk/release/*.zip
+            app/build/outputs/apk/release/*.apk
