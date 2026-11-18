@@ -240,6 +240,20 @@ class AppDataIsolationHook : IFrameworkHook {
                                 return@hookAfter
                             }
                         }
+
+                        // Only isolate the apps inside the HMA scope (the apps we hide apps from).
+                        // Everything else keeps the OEM/ROM default storage view, so unrelated apps
+                        // do not lose the ability to see other packages' Android/data and Android/obb.
+                        if (config.targetOnlyAppDataIsolation) {
+                            val inScope = apps.any { service.isHookEnabled(it) }
+
+                            logD(TAG) {
+                                "@needsStorageDataIsolation $uid and ${apps.contentToString()} - in scope: $inScope (target-only mode)"
+                            }
+
+                            returnValue.result = inScope
+                            return@hookAfter
+                        }
                     }
                 }
 
@@ -256,10 +270,13 @@ class AppDataIsolationHook : IFrameworkHook {
                             val pid = entry.key
                             val packageName = entry.value as String
 
-                            if (packageName in systemApps || packageName == BuildConfig.APP_PACKAGE_NAME) {
+                            if (packageName in systemApps ||
+                                packageName == BuildConfig.APP_PACKAGE_NAME ||
+                                (config.targetOnlyAppDataIsolation && !service.isHookEnabled(packageName))
+                            ) {
                                 logD(TAG) { "@remountAppStorageDirs SYSTEM $pid - $packageName is marked to remove" }
                                 keysToRemove += pid
-                                break
+                                continue
                             }
                         }
 

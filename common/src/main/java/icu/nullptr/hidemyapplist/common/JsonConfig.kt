@@ -55,6 +55,14 @@ data class JsonConfig(
     var altVoldAppDataIsolation: Boolean = false,
 
     /**
+     * Only apply the app data isolation to the apps inside the HMA scope
+     *
+     * Apps which are not in the scope keep the OEM/ROM default storage view,
+     * so enabling isolation does not change the obb/data layout of unrelated apps.
+     */
+    var targetOnlyAppDataIsolation: Boolean = true,
+
+    /**
      * Skip vold appdata isolation enforcements for system apps
      *
      * This will help you to reduce bootloop issues caused by vold appdata isolation
