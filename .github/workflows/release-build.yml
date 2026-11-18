@@ -128,7 +128,8 @@ jobs:
           # app APK is named <rootProject.name>-<versionName>-<variant>.apk
           APK=$(ls app/build/outputs/apk/release/*.apk | head -n1)
           VERSION=$(basename "$APK" | sed -E 's/^HMA-OSS-(.*)-release\.apk$/\1/')
-          CODE=$(grep -oP 'versionCode=\K[0-9]+' app/build/outputs/apk/release/output-metadata.json | head -n1 || true)
+          # output-metadata.json is JSON ("versionCode": 123); keep the properties form as a fallback
+          CODE=$(grep -oP '("versionCode"\s*:\s*|versionCode=)\K[0-9]+' app/build/outputs/apk/release/output-metadata.json | head -n1 || true)
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "versionCode=$CODE" >> "$GITHUB_OUTPUT"
           echo "apk=$APK" >> "$GITHUB_OUTPUT"
